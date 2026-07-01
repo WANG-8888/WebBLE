@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebBLE OTA · MCUmgr/SMP</title>
+<style>
+  :root{
+    --bg:#0c1014;
+    --panel:#121821;
+    --panel-2:#0f141b;
+    --line:#1f2a35;
+    --line-2:#2b3a48;
+    --ink:#e8eef2;
+    --ink-dim:#8b9aa7;
+    --ink-faint:#5d6b78;
+    --signal:#37d6c5;
+    --signal-dim:#1d6f68;
+    --amber:#f0b341;
+    --red:#ef5d63;
+    --green:#5fcf7e;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:28px 20px 64px;
+  }
+  .wrap{max-width:920px;margin:0 auto}
+
+  header.top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+  .brand{display:flex;align-items:baseline;gap:12px}
+  .brand h1{
+    font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0;
+  }
+  .brand .tag{font-family:var(--mono);font-size:11px;color:var(--signal);letter-spacing:.08em}
+  .subhead{color:var(--ink-faint);font-size:12px;max-width:560px;margin:2px 0 22px;font-family:var(--mono)}
+
+  .grid{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:760px){ .grid.two{grid-template-columns:1fr 1fr} }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 16px 18px;
+  }
+  .card h2{
+    font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-dim);margin:0 0 12px;display:flex;align-items:center;gap:8px;
+  }
+  .card h2 .num{font-family:var(--mono);color:var(--signal-dim);font-size:11px}
+
+  label.field{display:block;margin:0 0 10px}
+  label.field span{display:block;font-size:11px;color:var(--ink-dim);letter-spacing:.04em;margin-bottom:5px;text-transform:uppercase}
+  input[type=text], input[type=number], textarea, select{
+    width:100%;background:var(--panel-2);border:1px solid var(--line-2);color:var(--ink);
+    font-family:var(--mono);font-size:13px;border-radius:7px;padding:9px 10px;
+  }
+  textarea{resize:vertical;min-height:72px;line-height:1.45}
+  input:focus, textarea:focus, select:focus, button:focus-visible{
+    outline:2px solid var(--signal);outline-offset:1px;border-color:var(--signal)
+  }
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row > *{flex:1 1 auto}
+  .inline{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim)}
+  .inline input[type=checkbox]{accent-color:var(--signal);width:15px;height:15px}
+
+  button{
+    appearance:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;
+    border-radius:7px;padding:9px 14px;border:1px solid var(--line-2);
+    background:var(--panel-2);color:var(--ink);transition:border-color .12s, background .12s, opacity .12s;
+  }
+  button:hover:not(:disabled){border-color:var(--signal)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--signal);color:#04201d;border-color:var(--signal);font-weight:600}
+  button.primary:hover:not(:disabled){background:#4ee6d4}
+  button.danger{color:var(--red);border-color:#3a2326}
+  button.danger:hover:not(:disabled){border-color:var(--red)}
+  button.ghost{background:transparent}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+
+  .status-line{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none}
+  .dot.on{background:var(--green);box-shadow:0 0 0 4px rgba(95,207,126,.14)}
+  .dot.busy{background:var(--amber);box-shadow:0 0 0 4px rgba(240,179,65,.14)}
+  .dot.err{background:var(--red);box-shadow:0 0 0 4px rgba(239,93,99,.14)}
+
+  /* signature: MCUboot slot view */
+  .slots{display:grid;grid-template-columns:1fr 38px 1fr;align-items:stretch;gap:0;margin:4px 0 2px}
+  .slot{
+    border:1px solid var(--line-2);border-radius:9px;padding:12px;background:var(--panel-2);min-height:104px;
+    display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;
+  }
+  .slot .slabel{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+  .slot .srole{font-family:var(--mono);font-size:11px;color:var(--signal)}
+  .slot .shash{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);word-break:break-all;line-height:1.35}
+  .slot .flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:auto}
+  .flag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 5px;border-radius:4px;border:1px solid var(--line-2);color:var(--ink-dim)}
+  .flag.active{color:var(--green);border-color:#214a30}
+  .flag.pending{color:var(--amber);border-color:#4a3c1c}
+  .flag.confirmed{color:var(--signal);border-color:var(--signal-dim)}
+  .slot .fill{position:absolute;left:0;bottom:0;width:100%;height:0;background:linear-gradient(180deg, rgba(55,214,197,.05), rgba(55,214,197,.16));transition:height .15s ease;pointer-events:none}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-family:var(--mono);font-size:18px}
+  @media (prefers-reduced-motion: reduce){ .slot .fill{transition:none} }
+
+  .progress{margin-top:12px}
+  .bar{height:8px;background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;overflow:hidden}
+  .bar > i{display:block;height:100%;width:0;background:var(--signal);transition:width .12s linear}
+  @media (prefers-reduced-motion: reduce){ .bar > i{transition:none} }
+  .progress .meta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-dim);margin-top:6px}
+
+  .log{
+    background:#080b0e;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    font-family:var(--mono);font-size:11.5px;line-height:1.55;height:200px;overflow:auto;color:var(--ink-dim);
+  }
+  .log .t{color:var(--ink-faint)}
+  .log .ok{color:var(--green)}
+  .log .warn{color:var(--amber)}
+  .log .bad{color:var(--red)}
+  .log .tx{color:var(--signal)}
+  .log .rx{color:#7fb8ff}
+
+  .hint{font-size:11.5px;color:var(--ink-faint);line-height:1.5;margin-top:8px;font-family:var(--mono)}
+  .nope{background:#1b1416;border:1px solid #3a2326;color:#f0a9ac;border-radius:8px;padding:12px 14px;font-size:12.5px;margin-bottom:16px;display:none}
+  .nope.show{display:block}
+  hr.sep{border:none;border-top:1px solid var(--line);margin:14px 0}
+  details summary{cursor:pointer;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);outline:none}
+  details[open] summary{margin-bottom:10px}
+  code.k{font-family:var(--mono);color:var(--signal);font-size:11.5px}
+
+  .cmdlist{display:flex;flex-direction:column;gap:7px;margin-bottom:10px}
+  .cmd{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line-2);border-radius:7px;padding:7px 9px;flex-wrap:wrap}
+  .cmd .cl{font-size:12.5px;color:var(--ink);font-weight:500}
+  .cmd .cmeta{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
+  .cmd .spacer{flex:1 1 auto}
+  .cmd button{padding:5px 11px;font-size:12px;flex:0 0 auto}
+  .cmd button.x{color:var(--red);border-color:#3a2326;padding:5px 9px}
+  .empty-cmds{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);padding:3px 0 8px}
+  #profileSelect{font-family:var(--sans)}
+  .ver{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);border:1px solid var(--line-2);border-radius:5px;padding:2px 6px;align-self:center}
+  .headright{display:flex;align-items:center;gap:14px}
+  #langSelect{background:var(--panel-2);border:1px solid var(--line-2);color:var(--ink);font-family:var(--mono);font-size:12px;border-radius:6px;padding:5px 7px;width:auto}
+  :lang(zh) body, body:lang(zh){font-family:var(--sans),"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <h1>WebBLE OTA</h1>
+      <span class="tag">MCUmgr/SMP&nbsp;·&nbsp;multi-project</span>
+      <span class="ver" id="verStamp">v2.3 · 2026-07-01</span>
+    </div>
+    <div class="headright">
+      <select id="langSelect" aria-label="Language"><option value="en">EN</option><option value="zh">中文</option></select>
+      <div class="status-line"><span id="dot" class="dot"></span><span id="statusText">Not connected</span></div>
+    </div>
+  </header>
+  <p class="subhead" data-i18n="subhead">Firmware update over Bluetooth for SMP-server devices (Zephyr / nRF Connect SDK). Speaks the same protocol as nRF Device Manager.</p>
+
+  <div id="nope" class="nope"></div>
+
+  <!-- PROJECT -->
+  <section class="card">
+    <h2><span class="num">00</span> <span data-i18n="hProject">Project</span></h2>
+    <div class="row">
+      <label class="field" style="flex:1 1 220px"><span data-i18n="activeProject">Active project</span>
+        <select id="profileSelect"></select>
+      </label>
+      <label class="field" style="flex:1 1 180px"><span data-i18n="lName">Name</span>
+        <input id="profileName" type="text" placeholder="Project name" data-i18n-ph="phProjectName" autocomplete="off">
+      </label>
+    </div>
+    <div class="btnrow">
+      <button id="btnProfileSave" class="primary" data-i18n="saveToProject">Save to project</button>
+      <button id="btnProfileNew" data-i18n="bNew">New</button>
+      <button id="btnProfileDup" data-i18n="bDup">Duplicate</button>
+      <button id="btnProfileDel" class="danger" data-i18n="bDel">Delete</button>
+      <button id="btnProfileExport" class="ghost" data-i18n="bExport">Export</button>
+      <button id="btnProfileImport" class="ghost" data-i18n="bImport">Import</button>
+      <input id="profileImportInput" type="file" accept="application/json,.json" hidden>
+    </div>
+    <p class="hint" id="profileHint" data-i18n="profileHint">Each project remembers its device-name filter, write size, image slot, and its own parameter commands. Saved on this device; use Export to back up or move projects to another phone.</p>
+  </section>
+
+  <div class="grid two">
+
+    <!-- CONNECT -->
+    <section class="card">
+      <h2><span class="num">01</span> <span data-i18n="hConnect">Connect</span></h2>
+      <label class="field">
+        <span data-i18n="namePrefix">Name prefix (optional)</span>
+        <input id="namePrefix" type="text" placeholder="e.g. PulseLock" autocomplete="off">
+      </label>
+      <label class="inline" style="margin:0 0 12px"><input id="showAll" type="checkbox"> <span data-i18n="showAll">Show all devices (ignore SMP service filter)</span></label>
+      <div class="btnrow">
+        <button id="btnConnect" class="primary" data-i18n="bConnect">Connect</button>
+        <button id="btnDisconnect" disabled data-i18n="bDisconnect">Disconnect</button>
+        <button id="btnEcho" disabled class="ghost" data-i18n="bEcho">Echo test</button>
+      </div>
+      <p class="hint" data-i18n-html="connectHint">Requires Chrome / Edge / Opera (desktop or Android), served over HTTPS, <span class="k">localhost</span>, or opened directly as a local file. iOS Safari and Firefox have no Web Bluetooth.</p>
+    </section>
+
+    <!-- TRANSPORT -->
+    <section class="card">
+      <h2><span class="num">02</span> <span data-i18n="hTransport">Transport</span></h2>
+      <label class="field">
+        <span data-i18n="writeSize">GATT write size (bytes)</span>
+        <input id="mtu" type="number" min="20" max="509" value="244">
+      </label>
+      <p class="hint" data-i18n="transportHint">Web Bluetooth doesn't expose the negotiated MTU, so this is set manually. 244 is safe for the common 247-byte MTU. Lower it if writes fail; raise it only if your firmware has SMP packet reassembly enabled.</p>
+      <hr class="sep">
+      <label class="inline" style="margin:0"><input id="useImage1" type="checkbox" checked> <span data-i18n="useImage0">Upload to image 0 (app core / default slot)</span></label>
+    </section>
+  </div>
+
+  <!-- SLOTS -->
+  <section class="card" style="margin-top:14px">
+    <h2><span class="num">03</span> <span data-i18n="hImageState">Image state</span>
+      <button id="btnRefresh" class="ghost" disabled style="margin-left:auto;padding:5px 10px;font-size:11px" data-i18n="bRefresh">Refresh</button>
+    </h2>
+    <div class="slots">
+      <div class="slot" id="slot0">
+        <div class="slabel" data-i18n="slot0">Slot 0</div>
+        <div class="srole" data-i18n="rolePrimary">primary · running</div>
+        <div class="shash" id="hash0">—</div>
+        <div class="flags" id="flags0"></div>
+        <div class="fill"></div>
+      </div>
+      <div class="arrow" id="swapArrow">⇄</div>
+      <div class="slot" id="slot1">
+        <div class="slabel" data-i18n="slot1">Slot 1</div>
+        <div class="srole" data-i18n="roleSecondary">secondary · staging</div>
+        <div class="shash" id="hash1">—</div>
+        <div class="flags" id="flags1"></div>
+        <div class="fill" id="fill1"></div>
+      </div>
+    </div>
+    <p class="hint" id="stateHint" data-i18n="stateConnect">Connect to read the current images.</p>
+  </section>
+
+  <!-- UPLOAD -->
+  <section class="card" style="margin-top:14px">
+    <h2><span class="num">04</span> <span data-i18n="hUpload">Upload firmware</span></h2>
+    <div class="row">
+      <label class="field" style="flex:2 1 280px">
+        <span data-i18n="signedImage">Signed image (.bin / .signed.bin)</span>
+        <input id="file" type="text" readonly placeholder="No file selected" data-i18n-ph="noFile" style="cursor:pointer">
+        <input id="fileInput" type="file" hidden>
+      </label>
+      <button id="btnUpload" class="primary" disabled style="flex:0 0 auto" data-i18n="bUpload">Upload</button>
+      <button id="btnCancel" disabled style="flex:0 0 auto" data-i18n="bCancel">Cancel</button>
+    </div>
+    <div class="progress">
+      <div class="bar"><i id="barFill"></i></div>
+      <div class="meta"><span id="progPct">0%</span><span id="progRate">—</span><span id="progBytes">0 / 0 B</span></div>
+    </div>
+    <p class="hint" data-i18n-html="uploadHint">Use the MCUboot-signed binary your build produces (typically <span class="k">app_update.bin</span> / <span class="k">*.signed.bin</span>), not the raw <span class="k">.hex</span> or unsigned image.</p>
+    <hr class="sep">
+    <div class="btnrow">
+      <button id="btnTestReset" disabled data-i18n="bTestReset">Test &amp; reset</button>
+      <button id="btnConfirm" disabled data-i18n="bConfirm">Confirm running image</button>
+      <button id="btnReset" disabled data-i18n="bReset">Reset</button>
+      <button id="btnErase" class="danger" disabled data-i18n="bErase">Erase secondary</button>
+    </div>
+    <p class="hint" data-i18n-html="flowHint"><b>Recommended flow:</b> Upload → <b>Test &amp; reset</b>. The device swaps and boots the new image as a trial; if it isn't confirmed it reverts on the next reset. After it reboots and you reconnect, press <b>Confirm</b> to keep it permanently. On Matter-over-Thread devices, BLE advertising often stops after commissioning — trigger your SMP advertising (e.g. the button you use for nRF Device Manager) before reconnecting.</p>
+  </section>
+
+  <!-- DEVICE PARAMETER: PULSE DURATION (custom GATT config service) -->
+  <section class="card" style="margin-top:14px">
+    <h2><span class="num">05</span> <span data-i18n="hPulse">Pulse duration · device parameter</span></h2>
+    <div class="row" style="align-items:flex-end">
+      <label class="field" style="flex:0 0 160px">
+        <span data-i18n="pulseSet">Set (1–5 seconds)</span>
+        <input id="pulseInput" type="number" min="1" max="5" step="1" value="3">
+      </label>
+      <button id="btnPulseWrite" class="primary" disabled style="flex:0 0 auto" data-i18n="bWrite">Write</button>
+      <button id="btnPulseRead" disabled style="flex:0 0 auto" data-i18n="bRead">Read</button>
+      <div style="flex:1 1 auto;text-align:right;font-family:var(--mono);font-size:13px;color:var(--ink-dim)">
+        <span data-i18n="pulseCurrent">Current</span>: <span id="pulseVal" style="color:var(--signal)">—</span>
+      </div>
+    </div>
+    <p class="hint" data-i18n="pulseHint">Sets the lock pulse‑on time (1–5 s) over the device's config GATT service; saved on the device immediately, on the same connection as OTA. If Read/Write fails with a security error, the build may require pairing first.</p>
+  </section>
+
+  <!-- PARAMETERS -->
+  <section class="card" style="margin-top:14px">
+    <h2><span class="num">06</span> <span data-i18n="hParams">Parameters · custom SMP</span> <span class="num" id="paramsProjLabel" style="margin-left:auto;text-transform:none;letter-spacing:0"></span></h2>
+    <div id="cmdList" class="cmdlist"></div>
+    <details id="paramsDetails">
+      <summary data-i18n="addEditCmd">Add / edit command</summary>
+      <div style="margin-top:12px">
+        <label class="field"><span data-i18n="lLabel">Label</span><input id="cLabel" type="text" placeholder="e.g. Unlock, Set timeout" data-i18n-ph="phLabel" autocomplete="off"></label>
+        <div class="row">
+          <label class="field" style="flex:0 0 110px"><span data-i18n="groupId">Group ID</span><input id="cGroup" type="number" value="64"></label>
+          <label class="field" style="flex:0 0 110px"><span data-i18n="commandId">Command ID</span><input id="cCmd" type="number" value="0"></label>
+          <label class="field" style="flex:0 0 130px"><span data-i18n="opLabel">Op</span>
+            <select id="cOp"><option value="0" data-i18n="opRead">0 · read</option><option value="2" selected data-i18n="opWrite">2 · write</option></select>
+          </label>
+        </div>
+        <label class="field">
+          <span data-i18n="cborPayload">CBOR payload (JSON)</span>
+          <textarea id="cPayload" spellcheck="false">{ "param": 1 }</textarea>
+        </label>
+        <div class="btnrow">
+          <button id="btnSaveCmd" class="primary" data-i18n="saveToProject2">Save to project</button>
+          <button id="btnSendCustom" disabled data-i18n="sendNow">Send now</button>
+        </div>
+        <p class="hint" data-i18n="paramsHint">Application parameters live in a custom SMP group (IDs 64+) you define in firmware. Save the ones you use per project for one-tap access above. JSON supports numbers, strings, booleans, arrays and nested objects; byte fields aren't expressible here — send me a group's schema and I'll wire typed inputs for it.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- LOG -->
+  <section class="card" style="margin-top:14px">
+    <h2><span class="num">07</span> <span data-i18n="hLog">Log</span> <button id="btnClearLog" class="ghost" style="margin-left:auto;padding:5px 10px;font-size:11px" data-i18n="bClear">Clear</button></h2>
+    <div id="log" class="log"></div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+
+/* ---------- SMP / MCUmgr constants ---------- */
+const SMP_SERVICE = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
+const SMP_CHAR    = "da2e7828-fbce-4e01-ae9e-261174997c48";
+// Custom GATT config service (DZ portfolio) — pulse duration parameter
+const CONFIG_SERVICE = "f0a9b000-7b1e-4c4d-9a2e-1f3b5c7d9e00";
+const CONFIG_CHAR    = "f0a9b001-7b1e-4c4d-9a2e-1f3b5c7d9e00";
+const OP_READ = 0, OP_WRITE = 2;
+const GRP_OS = 0, GRP_IMG = 1;
+const OS_ECHO = 0, OS_RESET = 5;
+const IMG_STATE = 0, IMG_UPLOAD = 1, IMG_ERASE = 5;
+
+/* ---------- i18n ---------- */
+const I18N = {
+  en: {
+    subhead:"Firmware update over Bluetooth for SMP-server devices (Zephyr / nRF Connect SDK). Speaks the same protocol as nRF Device Manager.",
+    hProject:"Project", activeProject:"Active project", lName:"Name", phProjectName:"Project name",
+    saveToProject:"Save to project", bNew:"New", bDup:"Duplicate", bDel:"Delete", bExport:"Export", bImport:"Import",
+    profileHint:"Each project remembers its device-name filter, write size, image slot, and its own parameter commands. Saved on this device; use Export to back up or move projects to another phone.",
+    hConnect:"Connect", namePrefix:"Name prefix (optional)", showAll:"Show all devices (ignore SMP service filter)",
+    bConnect:"Connect", bDisconnect:"Disconnect", bEcho:"Echo test",
+    connectHint:'Requires Chrome / Edge / Opera (desktop or Android), served over HTTPS, <span class="k">localhost</span>, or opened directly as a local file. iOS Safari and Firefox have no Web Bluetooth.',
+    hTransport:"Transport", writeSize:"GATT write size (bytes)",
+    transportHint:"Web Bluetooth doesn't expose the negotiated MTU, so this is set manually. 244 is safe for the common 247-byte MTU. Lower it if writes fail; raise it only if your firmware has SMP packet reassembly enabled.",
+    useImage0:"Upload to image 0 (app core / default slot)",
+    hImageState:"Image state", bRefresh:"Refresh", slot0:"Slot 0", slot1:"Slot 1",
+    rolePrimary:"primary · running", roleSecondary:"secondary · staging",
+    stateConnect:"Connect to read the current images.",
+    stateStaged:"Slot 1 holds a staged image. Test & reset to trial it, or erase to clear.",
+    stateEmpty:"Slot 1 is empty. Upload a signed image to stage an update.",
+    hUpload:"Upload firmware", signedImage:"Signed image (.bin / .signed.bin)", noFile:"No file selected",
+    bUpload:"Upload", bCancel:"Cancel",
+    uploadHint:'Use the MCUboot-signed binary your build produces (typically <span class="k">app_update.bin</span> / <span class="k">*.signed.bin</span>), not the raw <span class="k">.hex</span> or unsigned image.',
+    bTestReset:"Test & reset", bConfirm:"Confirm running image", bReset:"Reset", bErase:"Erase secondary",
+    flowHint:'<b>Recommended flow:</b> Upload → <b>Test & reset</b>. The device swaps and boots the new image as a trial; if it isn\'t confirmed it reverts on the next reset. After it reboots and you reconnect, press <b>Confirm</b> to keep it permanently. On Matter-over-Thread devices, BLE advertising often stops after commissioning — trigger your SMP advertising (e.g. the button you use for nRF Device Manager) before reconnecting.',
+    hParams:"Parameters · custom SMP", addEditCmd:"Add / edit command", lLabel:"Label", phLabel:"e.g. Unlock, Set timeout",
+    groupId:"Group ID", commandId:"Command ID", opLabel:"Op", opRead:"0 · read", opWrite:"2 · write",
+    cborPayload:"CBOR payload (JSON)", saveToProject2:"Save to project", sendNow:"Send now",
+    paramsHint:"Application parameters live in a custom SMP group (IDs 64+) you define in firmware. Save the ones you use per project for one-tap access above. JSON supports numbers, strings, booleans, arrays and nested objects; byte fields aren't expressible here — send me a group's schema and I'll wire typed inputs for it.",
+    hLog:"Log", bClear:"Clear",
+    notConnected:"Not connected", disconnected:"Disconnected", emptyCmds:"No saved commands yet — add one below.",
+    hPulse:"Pulse duration · device parameter", pulseSet:"Set (1–5 seconds)", pulseCurrent:"Current",
+    bRead:"Read", bWrite:"Write",
+    pulseHint:"Sets the lock pulse‑on time (1–5 s) over the device's config GATT service; saved on the device immediately, on the same connection as OTA. If Read/Write fails with a security error, the build may require pairing first.",
+    nope:"Web Bluetooth isn't available here. Open this page in Chrome, Edge or Opera (desktop or Android), over HTTPS / localhost / as a local file. iOS Safari and Firefox don't support it."
+  },
+  zh: {
+    subhead:"透過藍牙為 SMP 伺服器裝置（Zephyr / nRF Connect SDK）更新韌體，使用與 nRF Device Manager 相同的協定。",
+    hProject:"專案", activeProject:"目前專案", lName:"名稱", phProjectName:"專案名稱",
+    saveToProject:"儲存到專案", bNew:"新增", bDup:"複製", bDel:"刪除", bExport:"匯出", bImport:"匯入",
+    profileHint:"每個專案會記住它的裝置名稱篩選、寫入大小、映像槽位，以及自己的參數指令。資料儲存在這台裝置上；可用「匯出」來備份或將專案搬到另一支手機。",
+    hConnect:"連線", namePrefix:"名稱前綴（選填）", showAll:"顯示所有裝置（忽略 SMP 服務篩選）",
+    bConnect:"連線", bDisconnect:"中斷連線", bEcho:"回應測試",
+    connectHint:'需使用 Chrome / Edge / Opera（桌面或 Android），並透過 HTTPS、<span class="k">localhost</span> 或直接開啟本機檔案。iOS Safari 與 Firefox 不支援 Web Bluetooth。',
+    hTransport:"傳輸", writeSize:"GATT 寫入大小（位元組）",
+    transportHint:"Web Bluetooth 不會提供協商後的 MTU，因此需手動設定。對常見的 247-byte MTU，244 是安全值。若寫入失敗請調低；只有在韌體啟用 SMP 封包重組時才調高。",
+    useImage0:"上傳到映像 0（應用核心／預設槽位）",
+    hImageState:"映像狀態", bRefresh:"重新整理", slot0:"槽位 0", slot1:"槽位 1",
+    rolePrimary:"主要 · 執行中", roleSecondary:"次要 · 暫存",
+    stateConnect:"連線後可讀取目前的映像。",
+    stateStaged:"槽位 1 已有暫存映像。可用「測試並重啟」試用，或清除它。",
+    stateEmpty:"槽位 1 是空的。上傳已簽章的映像以準備更新。",
+    hUpload:"上傳韌體", signedImage:"已簽章映像（.bin / .signed.bin）", noFile:"尚未選擇檔案",
+    bUpload:"上傳", bCancel:"取消",
+    uploadHint:'請使用建置產生的 MCUboot 已簽章檔（通常是 <span class="k">app_update.bin</span> / <span class="k">*.signed.bin</span>），而非原始 <span class="k">.hex</span> 或未簽章映像。',
+    bTestReset:"測試並重啟", bConfirm:"確認目前映像", bReset:"重啟", bErase:"清除次要槽位",
+    flowHint:'<b>建議流程：</b>上傳 →「<b>測試並重啟</b>」。裝置會切換並以試用模式開機；若未確認，下次重啟時會自動還原。裝置重新開機並重新連線後，按「<b>確認目前映像</b>」即可永久保留。在 Matter-over-Thread 裝置上，配網後通常會停止 BLE 廣播 — 重新連線前請先觸發 SMP 廣播（例如你用於 nRF Device Manager 的按鈕）。',
+    hParams:"參數 · 自訂 SMP", addEditCmd:"新增／編輯指令", lLabel:"標籤", phLabel:"例如：解鎖、設定逾時",
+    groupId:"群組 ID", commandId:"指令 ID", opLabel:"操作 (Op)", opRead:"0 · 讀取", opWrite:"2 · 寫入",
+    cborPayload:"CBOR 內容（JSON）", saveToProject2:"儲存到專案", sendNow:"立即傳送",
+    paramsHint:"應用參數位於你在韌體中定義的自訂 SMP 群組（ID 64 以上）。把每個專案常用的指令儲存起來，即可在上方一鍵使用。JSON 支援數字、字串、布林、陣列與巢狀物件；位元組欄位無法在此表示 — 把群組的結構給我，我可以為它做出對應的輸入欄位。",
+    hLog:"紀錄", bClear:"清除",
+    notConnected:"未連線", disconnected:"已中斷連線", emptyCmds:"尚未儲存任何指令 — 可在下方新增。",
+    hPulse:"脈衝時間 · 裝置參數", pulseSet:"設定（1–5 秒）", pulseCurrent:"目前",
+    bRead:"讀取", bWrite:"寫入",
+    pulseHint:"透過裝置的設定 GATT 服務設定鎖的脈衝開啟時間（1–5 秒），會立即儲存在裝置上，與 OTA 使用同一條連線。若讀取／寫入出現安全性錯誤，該韌體版本可能需要先配對。",
+    nope:"此瀏覽器無法使用 Web Bluetooth。請在 Chrome、Edge 或 Opera（桌面或 Android）中開啟，並透過 HTTPS / localhost / 本機檔案。iOS Safari 與 Firefox 不支援。"
+  }
+};
+let lang = "en";
+function t(k){ return (I18N[lang] && I18N[lang][k] != null) ? I18N[lang][k] : (I18N.en[k] != null ? I18N.en[k] : k); }
+function applyLang(l){
+  lang = (l === "zh") ? "zh" : "en";
+  document.documentElement.lang = (lang === "zh") ? "zh-Hant" : "en";
+  document.querySelectorAll("[data-i18n]").forEach(el=>{ const v=t(el.getAttribute("data-i18n")); if(v!=null) el.textContent=v; });
+  document.querySelectorAll("[data-i18n-html]").forEach(el=>{ const v=t(el.getAttribute("data-i18n-html")); if(v!=null) el.innerHTML=v; });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el=>{ const v=t(el.getAttribute("data-i18n-ph")); if(v!=null) el.placeholder=v; });
+  if (els.langSelect) els.langSelect.value = lang;
+  // refresh dynamic bits that aren't static markup
+  if (!(device && device.gatt && device.gatt.connected)) setStatus(t("notConnected"));
+  if (typeof renderCmdList === "function") renderCmdList();
+  try{ localStorage.setItem("smp_webble_lang", lang); }catch(e){}
+}
+
+/* ---------- minimal CBOR ---------- */
+function cborEncode(value){
+  const out = [];
+  const head = (mt, n) => {
+    const b = mt << 5;
+    if (n < 24) out.push(b | n);
+    else if (n < 0x100){ out.push(b | 24, n); }
+    else if (n < 0x10000){ out.push(b | 25, (n>>8)&0xff, n&0xff); }
+    else { out.push(b | 26, (n>>>24)&0xff, (n>>>16)&0xff, (n>>>8)&0xff, n&0xff); }
+  };
+  const enc = (v) => {
+    if (v === null || v === undefined){ out.push(0xf6); return; }
+    if (typeof v === "boolean"){ out.push(v ? 0xf5 : 0xf4); return; }
+    if (typeof v === "number"){
+      if (!Number.isInteger(v)) throw new Error("only integer numbers are supported");
+      if (v >= 0) head(0, v); else head(1, -1 - v);
+      return;
+    }
+    if (v instanceof Uint8Array){ head(2, v.length); for (const x of v) out.push(x); return; }
+    if (typeof v === "string"){ const u = new TextEncoder().encode(v); head(3, u.length); for (const x of u) out.push(x); return; }
+    if (Array.isArray(v)){ head(4, v.length); for (const i of v) enc(i); return; }
+    if (typeof v === "object"){ const k = Object.keys(v); head(5, k.length); for (const key of k){ enc(key); enc(v[key]); } return; }
+    throw new Error("unsupported value in CBOR encode");
+  };
+  enc(value);
+  return new Uint8Array(out);
+}
+function cborDecode(data){
+  let p = 0;
+  const BREAK = Symbol("cbor-break");
+  const read = () => {
+    const init = data[p++], mt = init >> 5, info = init & 0x1f;
+    let n = info, indefinite = false;
+    if (info === 24) n = data[p++];
+    else if (info === 25){ n = (data[p]<<8)|data[p+1]; p+=2; }
+    else if (info === 26){ n = (data[p]*0x1000000)+((data[p+1]<<16)|(data[p+2]<<8)|data[p+3]); p+=4; }
+    else if (info === 27){
+      const hi=(data[p]*0x1000000)+((data[p+1]<<16)|(data[p+2]<<8)|data[p+3]);
+      const lo=(data[p+4]*0x1000000)+((data[p+5]<<16)|(data[p+6]<<8)|data[p+7]); p+=8; n = hi*0x100000000+lo;
+    }
+    else if (info === 31){ indefinite = true; }   // indefinite length (arrays/maps/strings) or break marker
+    switch(mt){
+      case 0: return n;
+      case 1: return -1 - n;
+      case 2: {   // byte string
+        if (indefinite){ const parts=[]; let tot=0; for(;;){ const c=read(); if(c===BREAK) break; parts.push(c); tot+=c.length; }
+          const out=new Uint8Array(tot); let o=0; for(const c of parts){ out.set(c,o); o+=c.length; } return out; }
+        const b = data.slice(p, p+n); p+=n; return b;
+      }
+      case 3: {   // text string
+        if (indefinite){ let s=""; for(;;){ const c=read(); if(c===BREAK) break; s+=c; } return s; }
+        const s = new TextDecoder().decode(data.slice(p, p+n)); p+=n; return s;
+      }
+      case 4: {   // array
+        const a=[];
+        if (indefinite){ for(;;){ const v=read(); if(v===BREAK) break; a.push(v); } }
+        else { for(let i=0;i<n;i++) a.push(read()); }
+        return a;
+      }
+      case 5: {   // map
+        const o={};
+        if (indefinite){ for(;;){ const k=read(); if(k===BREAK) break; o[k]=read(); } }
+        else { for(let i=0;i<n;i++){ const k=read(); o[k]=read(); } }
+        return o;
+      }
+      case 7:
+        if (info===20) return false;
+        if (info===21) return true;
+        if (info===22) return null;
+        if (info===23) return undefined;
+        if (info===31) return BREAK;   // "break" stop code for indefinite items
+        return null;
+      default: throw new Error("unsupported CBOR major type "+mt);
+    }
+  };
+  return read();
+}
+
+/* ---------- SMP framing ---------- */
+function buildSmp(op, group, id, seq, payloadObj){
+  const payload = cborEncode(payloadObj ?? {});
+  const msg = new Uint8Array(8 + payload.length);
+  msg[0] = op & 0xff;
+  msg[1] = 0;
+  msg[2] = (payload.length >> 8) & 0xff;
+  msg[3] = payload.length & 0xff;
+  msg[4] = (group >> 8) & 0xff;
+  msg[5] = group & 0xff;
+  msg[6] = seq & 0xff;
+  msg[7] = id & 0xff;
+  msg.set(payload, 8);
+  return msg;
+}
+
+/* ---------- state ---------- */
+let device=null, server=null, characteristic=null;
+let seqCounter = 0;
+const pending = new Map();          // seq -> {resolve,reject,timeout}
+let rx = new Uint8Array(0);         // notification reassembly buffer
+let uploading=false, cancelRequested=false;
+let lastSlot1Hash=null;
+let uploadedSha=null;   // SHA-256 of the last image we uploaded (== MCUboot image hash)
+
+/* ---------- DOM ---------- */
+const $ = (id)=>document.getElementById(id);
+const els = {
+  dot:$("dot"), statusText:$("statusText"), nope:$("nope"),
+  namePrefix:$("namePrefix"), showAll:$("showAll"), mtu:$("mtu"), useImage1:$("useImage1"),
+  file:$("file"), fileInput:$("fileInput"),
+  barFill:$("barFill"), progPct:$("progPct"), progRate:$("progRate"), progBytes:$("progBytes"),
+  fill1:$("fill1"), hash0:$("hash0"), hash1:$("hash1"), flags0:$("flags0"), flags1:$("flags1"),
+  stateHint:$("stateHint"), log:$("log"),
+  cGroup:$("cGroup"), cCmd:$("cCmd"), cOp:$("cOp"), cPayload:$("cPayload"), cLabel:$("cLabel"),
+  cmdList:$("cmdList"), paramsDetails:$("paramsDetails"), paramsProjLabel:$("paramsProjLabel"),
+  profileSelect:$("profileSelect"), profileName:$("profileName"), profileImportInput:$("profileImportInput"),
+  langSelect:$("langSelect"),
+  pulseInput:$("pulseInput"), pulseVal:$("pulseVal"),
+};
+const buttons = ["btnConnect","btnDisconnect","btnEcho","btnRefresh","btnUpload","btnCancel",
+  "btnTestReset","btnConfirm","btnReset","btnErase","btnSendCustom","btnSaveCmd",
+  "btnProfileSave","btnProfileNew","btnProfileDup","btnProfileDel","btnProfileExport","btnProfileImport",
+  "btnPulseRead","btnPulseWrite"
+  ].reduce((a,k)=>(a[k]=$(k),a),{});
+
+/* ---------- logging ---------- */
+function ts(){ const d=new Date(); return d.toTimeString().slice(0,8)+"."+String(d.getMilliseconds()).padStart(3,"0"); }
+function log(msg, cls){
+  const line=document.createElement("div");
+  line.innerHTML = `<span class="t">${ts()}</span>  <span class="${cls||""}">${msg}</span>`;
+  els.log.appendChild(line);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+function hex(u8){ return Array.from(u8).map(b=>b.toString(16).padStart(2,"0")).join(""); }
+function fmtBytes(n){ if(n<1024) return n+" B"; if(n<1048576) return (n/1024).toFixed(1)+" KB"; return (n/1048576).toFixed(2)+" MB"; }
+
+/* ---------- status ---------- */
+function setStatus(text, kind){
+  els.statusText.textContent = text;
+  els.dot.className = "dot" + (kind?(" "+kind):"");
+}
+function setConnectedUI(on){
+  buttons.btnDisconnect.disabled = !on;
+  buttons.btnEcho.disabled = !on;
+  buttons.btnRefresh.disabled = !on;
+  buttons.btnUpload.disabled = !on || !pickedFile;
+  buttons.btnTestReset.disabled = !on;
+  buttons.btnConfirm.disabled = !on;
+  buttons.btnReset.disabled = !on;
+  buttons.btnErase.disabled = !on;
+  buttons.btnSendCustom.disabled = !on;
+  buttons.btnPulseRead.disabled = !on;
+  buttons.btnPulseWrite.disabled = !on;
+  buttons.btnConnect.disabled = on;
+}
+
+/* ---------- transport ---------- */
+function nextSeq(){ const s = seqCounter; seqCounter = (seqCounter+1) & 0xff; return s; }
+
+function onNotify(ev){
+  const dv = ev.target.value;
+  const chunk = new Uint8Array(dv.byteLength);
+  for (let i=0;i<dv.byteLength;i++) chunk[i] = dv.getUint8(i);
+  if (!uploading) log("rx "+chunk.length+"B","rx");
+  const merged = new Uint8Array(rx.length + chunk.length);
+  merged.set(rx,0); merged.set(chunk, rx.length);
+  rx = merged;
+  // need at least header to know length
+  while (rx.length >= 8){
+    const len = (rx[2]<<8)|rx[3];
+    if (rx.length < 8+len) return; // wait for more fragments
+    const frame = rx.slice(0, 8+len);
+    rx = rx.slice(8+len);
+    const seq = frame[6];
+    let payload;
+    try { payload = len ? cborDecode(frame.slice(8)) : {}; }
+    catch(e){ log("CBOR decode error: "+e.message, "bad"); payload = {__decodeError:e.message}; }
+    const waiter = pending.get(seq);
+    if (waiter){ pending.delete(seq); clearTimeout(waiter.timeout); waiter.resolve(payload); }
+  }
+}
+
+async function sendRaw(msg){
+  const step = Math.max(20, parseInt(els.mtu.value,10)||244);
+  for (let i=0;i<msg.length;i+=step){
+    await characteristic.writeValueWithoutResponse(msg.slice(i, i+step));
+  }
+}
+
+function transceive(op, group, id, payloadObj, timeoutMs){
+  const seq = nextSeq();
+  const msg = buildSmp(op, group, id, seq, payloadObj);
+  return new Promise((resolve,reject)=>{
+    const timeout = setTimeout(()=>{ pending.delete(seq); reject(new Error("timeout (seq "+seq+", group "+group+", cmd "+id+")")); }, timeoutMs||15000);
+    pending.set(seq, {resolve,reject,timeout});
+    sendRaw(msg).catch(e=>{ clearTimeout(timeout); pending.delete(seq); reject(e); });
+  });
+}
+
+/* upload uses pre-sized packets but same seq/pending machinery */
+function sendMessage(msg, timeoutMs){
+  const seq = nextSeq(); msg[6]=seq;
+  return new Promise((resolve,reject)=>{
+    const timeout = setTimeout(()=>{ pending.delete(seq); reject(new Error("upload chunk timeout (seq "+seq+")")); }, timeoutMs||15000);
+    pending.set(seq,{resolve,reject,timeout});
+    sendRaw(msg).catch(e=>{ clearTimeout(timeout); pending.delete(seq); reject(e); });
+  });
+}
+
+// Reject every in-flight request now — lets Cancel interrupt a long wait (e.g. the erase) immediately.
+function abortPending(err){
+  for (const [,w] of pending){ clearTimeout(w.timeout); w.reject(err); }
+  pending.clear();
+}
+
+/* ---------- connect ---------- */
+async function connect(){
+  if (!navigator.bluetooth){ showNope(t("nope")); return; }
+  try{
+    const opts = { optionalServices:[SMP_SERVICE, CONFIG_SERVICE] };
+    const prefix = els.namePrefix.value.trim();
+    if (els.showAll.checked){ opts.acceptAllDevices = true; }
+    else if (prefix){ opts.filters = [{ namePrefix: prefix }]; }
+    else { opts.filters = [{ services:[SMP_SERVICE] }]; }
+
+    setStatus("Requesting device…","busy");
+    log("Requesting device…");
+    device = await navigator.bluetooth.requestDevice(opts);
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    log("Selected: "+(device.name||"(unnamed)")+"  ["+device.id.slice(0,10)+"…]");
+
+    setStatus("Connecting…","busy");
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SMP_SERVICE);
+    characteristic = await svc.getCharacteristic(SMP_CHAR);
+    rx = new Uint8Array(0);
+    await characteristic.startNotifications();
+    characteristic.addEventListener("characteristicvaluechanged", onNotify);
+
+    setStatus("Connected · "+(device.name||"device"),"on");
+    setConnectedUI(true);
+    log("SMP characteristic ready. Notifications on.", "ok");
+    await refreshState();
+  }catch(e){
+    if (e && e.name === "NotFoundError"){ log("Device selection cancelled.","warn"); setStatus(t("notConnected")); }
+    else { log("Connect failed: "+e.message, "bad"); setStatus("Connect failed","err"); }
+  }
+}
+function onDisconnected(){
+  setStatus(t("disconnected"),"err");
+  setConnectedUI(false);
+  configChar = null;
+  for (const [seq,w] of pending){ clearTimeout(w.timeout); w.reject(new Error("disconnected")); }
+  pending.clear();
+  log("Device disconnected.","warn");
+}
+async function disconnect(){
+  try{ if (device && device.gatt.connected) device.gatt.disconnect(); }catch(e){}
+}
+
+/* ---------- device parameter: pulse duration (custom GATT service) ---------- */
+let configChar = null;
+async function getConfigChar(){
+  if (configChar) return configChar;
+  if (!(device && device.gatt && device.gatt.connected)) throw new Error("not connected");
+  const svc = await server.getPrimaryService(CONFIG_SERVICE);
+  configChar = await svc.getCharacteristic(CONFIG_CHAR);
+  return configChar;
+}
+function gattErr(e){
+  const m = (e && e.message) ? e.message : String(e);
+  if (/encrypt|auth|security|not permitted|insufficient/i.test(m))
+    return m + " — this build may require pairing before read/write.";
+  if (/no (services|characteristic)|not found/i.test(m))
+    return m + " — the config service isn't present on this device.";
+  return m;
+}
+async function pulseRead(){
+  try{
+    const c = await getConfigChar();
+    const dv = await c.readValue();
+    const v = dv.getUint8(0);
+    els.pulseVal.textContent = v + " s";
+    els.pulseInput.value = v;
+    log("Pulse duration read: "+v+" s","ok");
+  }catch(e){ log("Read pulse duration failed: "+gattErr(e),"bad"); }
+}
+async function pulseWrite(){
+  const v = parseInt(els.pulseInput.value,10);
+  if (!(v>=1 && v<=5)){ log("Pulse duration must be 1–5 seconds.","warn"); return; }
+  try{
+    const c = await getConfigChar();
+    await c.writeValue(new Uint8Array([v]));   // write-with-response
+    els.pulseVal.textContent = v + " s";
+    log("Pulse duration set to "+v+" s and saved on the device.","ok");
+  }catch(e){ log("Write pulse duration failed: "+gattErr(e),"bad"); }
+}
+
+/* ---------- echo / connectivity ---------- */
+async function echo(){
+  try{
+    log("→ os echo","tx");
+    const r = await transceive(OP_WRITE, GRP_OS, OS_ECHO, {d:"ping"});
+    log("← "+JSON.stringify(r),"rx");
+    if (r && r.r === "ping") log("Echo OK — SMP transport is alive.","ok");
+  }catch(e){ log("Echo failed: "+e.message,"bad"); }
+}
+
+/* ---------- image state ---------- */
+function renderFlags(container, img){
+  container.innerHTML="";
+  const add=(t,c)=>{ const s=document.createElement("span"); s.className="flag"+(c?" "+c:""); s.textContent=t; container.appendChild(s); };
+  if (img){
+    if (img.active) add("active","active");
+    if (img.confirmed) add("confirmed","confirmed");
+    if (img.pending) add("pending","pending");
+    if (img.bootable === false) add("not bootable");
+    if (img.permanent) add("permanent");
+    if (img.version) add("v"+img.version);
+  } else add("empty");
+}
+async function refreshState(){
+  try{
+    log("→ image state (list)","tx");
+    const r = await transceive(OP_READ, GRP_IMG, IMG_STATE, {});
+    const images = (r && r.images) || [];
+    log("← image state: "+images.length+" entr"+(images.length===1?"y":"ies"),"rx");
+    // dump every entry verbatim so we can see exactly what the firmware reports
+    images.forEach((im,idx)=>{
+      const flags = ["active","pending","confirmed","permanent","bootable"].filter(k=>im[k]).join(",")||"none";
+      log(`   [${idx}] slot=${im.slot} img=${im.image} v=${im.version||"?"} flags=${flags}`,"rx");
+      if (im.hash) log(`        hash=${hex(im.hash)}`,"rx");
+    });
+    if (r && r.rc) log("   (response rc="+r.rc+")","warn");
+
+    // primary = the running/active image; staged = the other one (don't rely on slot numbering)
+    const s0 = images.find(i=>i.active) || images.find(i=>i.slot===0) || images[0] || null;
+    const s1 = images.find(i=> i!==s0 && i.hash) || images.find(i=>i.slot===1) || null;
+    els.hash0.textContent = s0 && s0.hash ? hex(s0.hash) : "—";
+    els.hash1.textContent = s1 && s1.hash ? hex(s1.hash) : "— (empty)";
+    renderFlags(els.flags0, s0);
+    renderFlags(els.flags1, s1);
+    lastSlot1Hash = (s1 && s1.hash) ? s1.hash : null;
+    els.stateHint.textContent = s1 && s1.hash ? t("stateStaged") : t("stateEmpty");
+  }catch(e){ log("Read state failed: "+e.message,"bad"); }
+}
+
+/* ---------- upload ---------- */
+let pickedFile=null, pickedBytes=null;
+
+function buildUploadPacket(off, bytes, total, sha, imageNum, maxPacket){
+  let dataLen = Math.min(maxPacket, total - off);
+  for (let guard=0; guard<8 && dataLen>0; guard++){
+    const payload = { off };
+    if (off === 0){ payload.image = imageNum; payload.len = total; payload.sha = sha; }
+    payload.data = bytes.slice(off, off+dataLen);
+    const msg = buildSmp(OP_WRITE, GRP_IMG, IMG_UPLOAD, 0, payload);
+    if (msg.length <= maxPacket) return { msg, dataLen };
+    dataLen -= (msg.length - maxPacket) + 2;
+  }
+  throw new Error("GATT write size too small to carry an upload chunk — raise it or check MTU.");
+}
+
+const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+let wakeLock=null;
+async function acquireWakeLock(){ try{ if("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); } }catch(e){} }
+function releaseWakeLock(){ try{ if(wakeLock){ wakeLock.release(); wakeLock=null; } }catch(e){} }
+document.addEventListener("visibilitychange", async ()=>{ if (uploading && document.visibilityState==="visible" && !wakeLock) acquireWakeLock(); });
+
+async function upload(){
+  if (!pickedBytes){ log("No file selected.","warn"); return; }
+  uploading = true; cancelRequested = false;
+  buttons.btnUpload.disabled=true; buttons.btnCancel.disabled=false;
+  await acquireWakeLock();
+  const total = pickedBytes.length;
+  const imageNum = els.useImage1.checked ? 0 : 1;
+  const maxPacket = Math.max(40, parseInt(els.mtu.value,10)||244);
+  log(`Upload start · ${fmtBytes(total)} → image ${imageNum} · ${maxPacket}B packets`,"tx");
+
+  let sha;
+  try { sha = new Uint8Array(await crypto.subtle.digest("SHA-256", pickedBytes)); }
+  catch(e){ log("SHA-256 unavailable (need secure context): "+e.message,"bad"); uploading=false; releaseWakeLock(); buttons.btnCancel.disabled=true; buttons.btnUpload.disabled=false; return; }
+  uploadedSha = sha;   // keep it: this is the hash MCUboot's test command needs
+
+  const MAX_RETRIES = 8;
+  let off=0, started=performance.now(), lastT=started, lastOff=0;
+  try{
+    while (off < total){
+      if (cancelRequested){ log("Upload cancelled by user.","warn"); break; }
+      const { msg, dataLen } = buildUploadPacket(off, pickedBytes, total, sha, imageNum, maxPacket);
+      const firstBlock = (off === 0);
+      let r=null;
+      if (firstBlock){
+        // Send the first block ONCE and wait patiently. Resending it would re-trigger any
+        // device-side DEBUG log-flood — which is what starves the update thread on un-fixed builds.
+        log("Sending first block…","tx");
+        const t0=performance.now();
+        const hb=setInterval(()=>{ els.progRate.textContent="waiting for first-block ack… "+Math.round((performance.now()-t0)/1000)+"s"; }, 1000);
+        try{ r = await sendMessage(msg, 150000); }
+        catch(e){
+          clearInterval(hb);
+          if (cancelRequested) throw new Error("cancelled");
+          throw new Error("first block not acknowledged in 150s. If the device firmware logs at DEBUG, an RTT log‑flood starves the update thread on the first block — flash the no‑log build (0.3.17). ("+e.message+")");
+        }
+        clearInterval(hb);
+      } else {
+        // subsequent blocks: retry on a dropped ack (safe to resend — no flood trigger)
+        for (let attempt=0; ; attempt++){
+          try{ r = await sendMessage(msg, 8000); break; }
+          catch(e){
+            if (cancelRequested) throw new Error("cancelled");
+            if (attempt >= MAX_RETRIES) throw new Error(`stalled at offset ${off} after ${attempt} retries (${e.message}). Move closer / lower the write size and try again.`);
+            log(`chunk stalled at ${fmtBytes(off)} — retry ${attempt+1}/${MAX_RETRIES}`, "warn");
+            await sleep(250 + 250*attempt);
+          }
+        }
+      }
+      if (r && r.rc !== undefined && r.rc !== 0) throw new Error("device returned rc="+r.rc+(r.rsn?(" ("+r.rsn+")"):""));
+      // device echoes the next offset it wants; trust it for resync (also fixes duplicate/late acks)
+      off = (r && typeof r.off === "number") ? r.off : off + dataLen;
+      // progress
+      const now=performance.now();
+      const pct = Math.min(100, (off/total)*100);
+      els.barFill.style.width = pct+"%";
+      els.fill1.style.height = pct+"%";
+      els.progPct.textContent = pct.toFixed(1)+"%";
+      els.progBytes.textContent = fmtBytes(off)+" / "+fmtBytes(total);
+      if (now-lastT > 400){
+        const rate = (off-lastOff)/((now-lastT)/1000);
+        const remain = rate>0 ? (total-off)/rate : 0;
+        els.progRate.textContent = fmtBytes(rate)+"/s · ~"+Math.ceil(remain)+"s left";
+        lastT=now; lastOff=off;
+      }
+    }
+    if (!cancelRequested && off>=total){
+      const secs=((performance.now()-started)/1000);
+      log(`Upload complete · ${fmtBytes(total)} in ${secs.toFixed(1)}s (avg ${fmtBytes(total/secs)}/s)`,"ok");
+      els.progRate.textContent = (total/secs/1024).toFixed(1)+" KB/s avg";
+      await refreshState();
+      if (!lastSlot1Hash) log("Slot 1 not reported by the device, but the image was accepted — Test & reset will use the uploaded image's hash.","warn");
+      log("Next: Test & reset, then Confirm after the device reboots.","warn");
+    }
+  }catch(e){
+    if (/cancel/i.test(e.message)) log("Upload cancelled.","warn");
+    else log("Upload failed: "+e.message,"bad");
+  }finally{
+    uploading=false; releaseWakeLock(); buttons.btnCancel.disabled=true; buttons.btnUpload.disabled = !pickedFile;
+  }
+}
+
+/* ---------- test / confirm / reset / erase ---------- */
+async function testAndReset(){
+  // Prefer the hash the DEVICE reports (correct byte range). Only fall back to the
+  // file SHA, which may not match MCUboot's image hash if the image has trailing TLVs.
+  const h = lastSlot1Hash || uploadedSha;
+  if (!h){ log("No image hash available. Upload an image first, or tap Refresh.","warn"); return; }
+  const source = lastSlot1Hash ? "device image list" : "computed from file (may not match if firmware reports its own hash)";
+  try{
+    log("→ image test (set pending) hash="+hex(h)+" ("+source+")","tx");
+    const r = await transceive(OP_WRITE, GRP_IMG, IMG_STATE, { hash:h, confirm:false });
+    log("← "+JSON.stringify(r,(k,v)=> v instanceof Uint8Array ? hex(v) : v),"rx");
+    if (r && r.rc) throw new Error("device rejected with rc="+r.rc+" — the hash likely doesn't match the staged image. Tap Refresh; if Slot 1 shows a hash, that one will be used.");
+    // verify the device actually flagged it pending before we reboot
+    const pendingOk = r && r.images && r.images.some(i=>i.pending || (i.hash && hex(i.hash)===hex(h) && !i.active));
+    if (!pendingOk) log("Warning: device did not report the image as pending. Swap may not happen on reset.","warn");
+    else log("Image marked pending for test swap.","ok");
+    await reset();
+  }catch(e){ log("Test failed: "+e.message,"bad"); }
+}
+async function confirm(){
+  try{
+    log("→ image state set (confirm running)","tx");
+    const r = await transceive(OP_WRITE, GRP_IMG, IMG_STATE, { confirm:true });
+    if (r && r.rc) throw new Error("rc="+r.rc);
+    log("Running image confirmed — update is now permanent.","ok");
+    await refreshState();
+  }catch(e){ log("Confirm failed: "+e.message,"bad"); }
+}
+async function reset(){
+  try{
+    log("→ os reset","tx");
+    await transceive(OP_WRITE, GRP_OS, OS_RESET, {}, 3000).catch(()=>{});
+    log("Reset sent. Device will reboot and the link will drop.","warn");
+  }catch(e){ log("Reset: "+e.message,"warn"); }
+}
+async function erase(){
+  try{
+    log("→ image erase (secondary)","tx");
+    const r = await transceive(OP_WRITE, GRP_IMG, IMG_ERASE, {}, 20000);
+    if (r && r.rc) throw new Error("rc="+r.rc);
+    log("Secondary slot erased.","ok");
+    await refreshState();
+  }catch(e){ log("Erase failed: "+e.message,"bad"); }
+}
+
+/* ---------- project profiles ---------- */
+const STORE_KEY = "smp_webble_profiles_v1";
+let profiles = [];
+let activeId = null;
+const newId = ()=> "p_"+Math.random().toString(36).slice(2,9);
+
+function defaultProfile(){
+  return { id:newId(), name:"Pulse Lock", namePrefix:"", writeSize:null, imageNum:0,
+    commands:[ { label:"Example: set param", group:64, cmd:0, op:2, payload:'{ "param": 1 }' } ] };
+}
+function storeLoad(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw){ const o = JSON.parse(raw); profiles = o.profiles||[]; activeId = o.activeId||null; }
+  }catch(e){ /* storage blocked (sandbox/private) — run in-memory, Export still works */ }
+  if (!profiles.length) profiles = [ defaultProfile() ];
+  if (!activeId || !profiles.find(p=>p.id===activeId)) activeId = profiles[0].id;
+}
+function storeSave(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify({profiles, activeId})); }catch(e){ /* ignore */ }
+}
+function activeProfile(){ return profiles.find(p=>p.id===activeId) || profiles[0]; }
+
+function renderProfileSelect(){
+  const sel = els.profileSelect; sel.innerHTML="";
+  for (const p of profiles){ const o=document.createElement("option"); o.value=p.id; o.textContent=p.name; sel.appendChild(o); }
+  sel.value = activeId;
+  els.profileName.value = activeProfile().name;
+  els.paramsProjLabel.textContent = activeProfile().name;
+}
+function applyProfile(){
+  const p = activeProfile();
+  els.namePrefix.value = p.namePrefix || "";
+  els.useImage1.checked = (p.imageNum||0) === 0;
+  if (p.writeSize) els.mtu.value = p.writeSize;
+  renderProfileSelect();
+  renderCmdList();
+}
+function saveToProfile(){
+  const p = activeProfile();
+  p.name = els.profileName.value.trim() || p.name;
+  p.namePrefix = els.namePrefix.value.trim();
+  p.writeSize = parseInt(els.mtu.value,10) || null;
+  p.imageNum = els.useImage1.checked ? 0 : 1;
+  storeSave(); renderProfileSelect();
+  log("Saved project “"+p.name+"”.","ok");
+}
+function newProfile(){
+  const p = { id:newId(), name:"New project", namePrefix:"", writeSize:parseInt(els.mtu.value,10)||null, imageNum:0, commands:[] };
+  profiles.push(p); activeId=p.id; storeSave(); applyProfile();
+  els.profileName.focus(); els.profileName.select();
+  log("Created a project. Set its name and device filter, then Save to project.","warn");
+}
+function duplicateProfile(){
+  const p = JSON.parse(JSON.stringify(activeProfile()));
+  p.id=newId(); p.name=activeProfile().name+" copy";
+  profiles.push(p); activeId=p.id; storeSave(); applyProfile();
+  log("Duplicated project.","ok");
+}
+function deleteProfile(){
+  if (profiles.length<=1){ log("Keep at least one project.","warn"); return; }
+  const p=activeProfile();
+  if (!confirm("Delete project “"+p.name+"”? This can't be undone.")) return;
+  profiles = profiles.filter(x=>x.id!==p.id); activeId=profiles[0].id; storeSave(); applyProfile();
+  log("Deleted project.","warn");
+}
+function exportProfiles(){
+  const blob = new Blob([JSON.stringify({profiles, activeId}, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="smp-webble-projects.json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  log("Exported "+profiles.length+" project(s).","ok");
+}
+async function importProfiles(file){
+  try{
+    const o = JSON.parse(await file.text());
+    if (!o.profiles || !Array.isArray(o.profiles)) throw new Error("file has no projects");
+    const byId = new Map(profiles.map(p=>[p.id,p]));
+    for (const p of o.profiles) byId.set(p.id, p);   // imported wins on id clash
+    profiles = Array.from(byId.values());
+    if (o.activeId && byId.has(o.activeId)) activeId = o.activeId;
+    storeSave(); applyProfile();
+    log("Imported "+o.profiles.length+" project(s).","ok");
+  }catch(e){ log("Import failed: "+e.message,"bad"); }
+}
+
+/* ---------- saved parameter commands ---------- */
+function renderCmdList(){
+  const list = els.cmdList; list.innerHTML="";
+  const cmds = activeProfile().commands || [];
+  if (!cmds.length){
+    const d=document.createElement("div"); d.className="empty-cmds";
+    d.textContent=t("emptyCmds"); list.appendChild(d); return;
+  }
+  cmds.forEach((c,i)=>{
+    const row=document.createElement("div"); row.className="cmd";
+    const lbl=document.createElement("span"); lbl.className="cl"; lbl.textContent=c.label||("cmd "+i);
+    const meta=document.createElement("span"); meta.className="cmeta"; meta.textContent=`g${c.group}/c${c.cmd}/op${c.op}`;
+    const sp=document.createElement("span"); sp.className="spacer";
+    const send=document.createElement("button"); send.textContent="Send"; send.className="primary"; send.onclick=()=>runCmd(c);
+    const edit=document.createElement("button"); edit.textContent="Edit"; edit.onclick=()=>loadCmdIntoEditor(c);
+    const del=document.createElement("button"); del.textContent="×"; del.className="x";
+    del.onclick=()=>{ activeProfile().commands.splice(i,1); storeSave(); renderCmdList(); };
+    row.append(lbl,meta,sp,send,edit,del); list.appendChild(row);
+  });
+}
+function loadCmdIntoEditor(c){
+  els.cLabel.value=c.label||""; els.cGroup.value=c.group; els.cCmd.value=c.cmd;
+  els.cOp.value=String(c.op); els.cPayload.value=c.payload;
+  els.paramsDetails.open=true;
+}
+function editorToCmd(){
+  return { label: els.cLabel.value.trim()||"Command",
+           group: parseInt(els.cGroup.value,10)|0, cmd: parseInt(els.cCmd.value,10)|0,
+           op: parseInt(els.cOp.value,10)|0, payload: els.cPayload.value };
+}
+function saveCmd(){
+  const c = editorToCmd();
+  try{ JSON.parse(c.payload||"{}"); }catch(e){ log("Payload isn't valid JSON: "+e.message,"bad"); return; }
+  const cmds = activeProfile().commands;
+  const ex = cmds.findIndex(x=>x.label===c.label);
+  if (ex>=0) cmds[ex]=c; else cmds.push(c);
+  storeSave(); renderCmdList();
+  log("Saved “"+c.label+"” to "+activeProfile().name+".","ok");
+}
+async function runCmd(c){
+  let body; try{ body=JSON.parse(c.payload||"{}"); }
+  catch(e){ log("“"+c.label+"” payload invalid JSON: "+e.message,"bad"); return; }
+  if (!(device && device.gatt && device.gatt.connected)){ log("Connect first.","warn"); return; }
+  try{
+    log(`→ ${c.label} · g${c.group}/c${c.cmd}/op${c.op} · ${JSON.stringify(body)}`,"tx");
+    const r = await transceive(c.op, c.group, c.cmd, body);
+    log("← "+JSON.stringify(r,(k,v)=> v instanceof Uint8Array ? hex(v) : v),"rx");
+    if (r && r.rc) log("Note: response rc="+r.rc,"warn");
+  }catch(e){ log("“"+c.label+"” failed: "+e.message,"bad"); }
+}
+async function sendCustom(){ await runCmd(editorToCmd()); }
+
+/* ---------- file pick ---------- */
+function pickFile(){ els.fileInput.click(); }
+els && (els.fileInput.onchange = async (e)=>{
+  const f = e.target.files[0]; if (!f) return;
+  pickedFile = f;
+  els.file.value = f.name + "  ("+fmtBytes(f.size)+")";
+  pickedBytes = new Uint8Array(await f.arrayBuffer());
+  log("Loaded "+f.name+" · "+fmtBytes(f.size));
+  buttons.btnUpload.disabled = !(device && device.gatt && device.gatt.connected);
+  // quick MCUboot magic sanity check (header magic 0x96f3b83d, little-endian first 4 bytes)
+  if (pickedBytes.length>=4){
+    const m = pickedBytes[0]|(pickedBytes[1]<<8)|(pickedBytes[2]<<16)|(pickedBytes[3]<<24);
+    if ((m>>>0) !== 0x96f3b83d) log("Heads up: file doesn't start with the MCUboot image magic. Make sure this is the signed update image, not a raw/unsigned binary.","warn");
+    else log("MCUboot image magic OK.","ok");
+  }
+});
+
+/* ---------- misc UI ---------- */
+function showNope(msg){ els.nope.textContent = msg; els.nope.classList.add("show"); }
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  // wire buttons
+  buttons.btnConnect.onclick = connect;
+  buttons.btnDisconnect.onclick = disconnect;
+  buttons.btnEcho.onclick = echo;
+  buttons.btnRefresh.onclick = refreshState;
+  buttons.btnUpload.onclick = upload;
+  buttons.btnCancel.onclick = ()=>{ cancelRequested=true; log("Cancelling…","warn"); abortPending(new Error("cancelled by user")); };
+  buttons.btnTestReset.onclick = testAndReset;
+  buttons.btnConfirm.onclick = confirm;
+  buttons.btnReset.onclick = reset;
+  buttons.btnErase.onclick = erase;
+  buttons.btnSendCustom.onclick = sendCustom;
+  buttons.btnSaveCmd.onclick = saveCmd;
+  buttons.btnPulseRead.onclick = pulseRead;
+  buttons.btnPulseWrite.onclick = pulseWrite;
+  buttons.btnProfileSave.onclick = saveToProfile;
+  buttons.btnProfileNew.onclick = newProfile;
+  buttons.btnProfileDup.onclick = duplicateProfile;
+  buttons.btnProfileDel.onclick = deleteProfile;
+  buttons.btnProfileExport.onclick = exportProfiles;
+  buttons.btnProfileImport.onclick = ()=> els.profileImportInput.click();
+  els.profileImportInput.onchange = (e)=>{ const f=e.target.files[0]; if(f) importProfiles(f); e.target.value=""; };
+  els.profileSelect.onchange = (e)=>{ activeId=e.target.value; storeSave(); applyProfile(); };
+  els.langSelect.onchange = (e)=> applyLang(e.target.value);
+  els.file.onclick = pickFile;
+  $("btnClearLog").onclick = ()=>{ els.log.innerHTML=""; };
+  setConnectedUI(false);
+
+  // load saved projects (or seed a default)
+  storeLoad();
+
+  // language: saved choice, else browser preference, else English — apply after projects exist
+  let savedLang=null; try{ savedLang=localStorage.getItem("smp_webble_lang"); }catch(e){}
+  applyLang(savedLang || ((navigator.language||"").toLowerCase().startsWith("zh") ? "zh" : "en"));
+
+  applyProfile();
+
+  if (!navigator.bluetooth){
+    showNope(t("nope"));
+    buttons.btnConnect.disabled = true;
+  }
+
+  // iOS Core Bluetooth caps write-without-response near ~180 bytes; default low so writes don't fail in Bluefy.
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  if (isIOS && !activeProfile().writeSize){ els.mtu.value = 180; log("iOS detected — GATT write size set to 180. Lower to 150 if writes fail.","warn"); }
+  log("WebBLE OTA "+($("verStamp")?$("verStamp").textContent:"")+" loaded.","ok");
+  log("Ready. Pick a project, then connect to a device running an SMP server over BLE.");
+});
+</script>
+</body>
+</html>
